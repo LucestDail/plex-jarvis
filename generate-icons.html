@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS 아이콘 생성기</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #1a1a2e;
+      color: #e0e0e0;
+    }
+    .container {
+      background: #16213e;
+      padding: 30px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+    h1 {
+      color: #00d4ff;
+      text-align: center;
+    }
+    .icon-preview {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin: 30px 0;
+      flex-wrap: wrap;
+    }
+    .icon-item {
+      text-align: center;
+    }
+    .icon-item canvas {
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    button {
+      background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      color: #0f0c29;
+      font-weight: 600;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    .instructions {
+      background: rgba(0, 212, 255, 0.1);
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      border-left: 3px solid #00d4ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎯 JARVIS 아이콘 생성기</h1>
+    <p style="text-align: center; color: #888;">아이콘을 생성하려면 아래 버튼을 클릭하세요</p>
+    
+    <div class="icon-preview" id="preview"></div>
+    
+    <div style="text-align: center; margin: 20px 0;">
+      <button onclick="generateIcons()">아이콘 생성</button>
+      <button onclick="downloadAll()">모두 다운로드</button>
+    </div>
+    
+    <div class="instructions">
+      <h3>사용 방법:</h3>
+      <ol>
+        <li>"아이콘 생성" 버튼을 클릭하여 미리보기를 확인합니다.</li>
+        <li>"모두 다운로드" 버튼을 클릭하여 모든 크기의 아이콘을 다운로드합니다.</li>
+        <li>다운로드된 파일들을 <code>icons/</code> 폴더에 저장합니다.</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    const svgString = `<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="jarvisGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#0099cc;stop-opacity:1" />
+        </linearGradient>
+        <radialGradient id="jarvisGlow" cx="50%" cy="50%">
+          <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:0.8" />
+          <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:0" />
+        </radialGradient>
+      </defs>
+      
+      <circle cx="64" cy="64" r="60" fill="#1a1a2e" stroke="url(#jarvisGradient)" stroke-width="3"/>
+      <circle cx="64" cy="64" r="50" fill="none" stroke="url(#jarvisGradient)" stroke-width="2" opacity="0.6"/>
+      <circle cx="64" cy="64" r="45" fill="none" stroke="url(#jarvisGradient)" stroke-width="1.5" opacity="0.4"/>
+      <circle cx="64" cy="64" r="20" fill="url(#jarvisGradient)" opacity="0.9"/>
+      <circle cx="64" cy="64" r="12" fill="#ffffff" opacity="0.6"/>
+      
+      <line x1="64" y1="20" x2="64" y2="44" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="64" y1="84" x2="64" y2="108" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="20" y1="64" x2="44" y2="64" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="84" y1="64" x2="108" y2="64" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+      
+      <line x1="32" y1="32" x2="48" y2="48" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+      <line x1="96" y1="32" x2="80" y2="48" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+      <line x1="32" y1="96" x2="48" y2="80" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+      <line x1="96" y1="96" x2="80" y2="80" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+      
+      <circle cx="64" cy="64" r="25" fill="url(#jarvisGlow)" opacity="0.5"/>
+    </svg>`;
+
+    const sizes = [16, 48, 128];
+    const canvases = [];
+
+    function svgToCanvas(svgString, size) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        const img = new Image();
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, size, size);
+          URL.revokeObjectURL(url);
+          resolve(canvas);
+        };
+        
+        img.src = url;
+      });
+    }
+
+    async function generateIcons() {
+      const preview = document.getElementById('preview');
+      preview.innerHTML = '';
+      canvases.length = 0;
+
+      for (const size of sizes) {
+        const canvas = await svgToCanvas(svgString, size);
+        canvases.push({ canvas, size });
+        
+        const iconItem = document.createElement('div');
+        iconItem.className = 'icon-item';
+        iconItem.innerHTML = `
+          <canvas width="${size}" height="${size}"></canvas>
+          <div>icon${size}.png (${size}x${size})</div>
+        `;
+        
+        const previewCanvas = iconItem.querySelector('canvas');
+        const ctx = previewCanvas.getContext('2d');
+        ctx.drawImage(canvas, 0, 0);
+        
+        preview.appendChild(iconItem);
+      }
+    }
+
+    function downloadCanvas(canvas, filename) {
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    function downloadAll() {
+      if (canvases.length === 0) {
+        alert('먼저 "아이콘 생성" 버튼을 클릭하세요.');
+        return;
+      }
+      
+      canvases.forEach(({ canvas, size }) => {
+        setTimeout(() => {
+          downloadCanvas(canvas, `icon${size}.png`);
+        }, size * 10); // 순차적으로 다운로드
+      });
+    }
+
+    // 페이지 로드 시 자동 생성
+    window.addEventListener('load', () => {
+      setTimeout(generateIcons, 500);
+    });
+  </script>
+</body>
+</html>
+

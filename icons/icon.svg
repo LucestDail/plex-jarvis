@@ -1,0 +1,43 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="jarvisGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0099cc;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="jarvisGlow" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#00d4ff;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- 배경 원 -->
+  <circle cx="64" cy="64" r="60" fill="#1a1a2e" stroke="url(#jarvisGradient)" stroke-width="3"/>
+  
+  <!-- 외부 링 -->
+  <circle cx="64" cy="64" r="50" fill="none" stroke="url(#jarvisGradient)" stroke-width="2" opacity="0.6"/>
+  <circle cx="64" cy="64" r="45" fill="none" stroke="url(#jarvisGradient)" stroke-width="1.5" opacity="0.4"/>
+  
+  <!-- 중앙 코어 -->
+  <circle cx="64" cy="64" r="20" fill="url(#jarvisGradient)" opacity="0.9">
+    <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="64" cy="64" r="12" fill="#ffffff" opacity="0.6"/>
+  
+  <!-- 십자선 -->
+  <line x1="64" y1="20" x2="64" y2="44" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="64" y1="84" x2="64" y2="108" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="20" y1="64" x2="44" y2="64" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="84" y1="64" x2="108" y2="64" stroke="url(#jarvisGradient)" stroke-width="2.5" stroke-linecap="round"/>
+  
+  <!-- 대각선 -->
+  <line x1="32" y1="32" x2="48" y2="48" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="96" y1="32" x2="80" y2="48" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="32" y1="96" x2="48" y2="80" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <line x1="96" y1="96" x2="80" y2="80" stroke="url(#jarvisGradient)" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  
+  <!-- 글로우 효과 -->
+  <circle cx="64" cy="64" r="25" fill="url(#jarvisGlow)" opacity="0.5">
+    <animate attributeName="r" values="25;30;25" dur="3s" repeatCount="indefinite"/>
+  </circle>
+</svg>
+
