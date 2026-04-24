@@ -14,7 +14,7 @@
           <circle cx="50" cy="50" r="45" fill="#1a1a2e" stroke="#00d4ff" stroke-width="3"/>
           <circle cx="50" cy="50" r="30" fill="none" stroke="#00d4ff" stroke-width="2" opacity="0.6"/>
           <circle cx="50" cy="50" r="15" fill="#00d4ff" opacity="0.8"/>
-          <path d="M 50 20 L 50 35 M 50 65 L 50 80 M 20 50 L 35 50 M 65 50 L 80 50" 
+          <path d="M 50 20 L 50 35 M 50 65 L 50 80 M 20 50 L 35 50 M 65 50 L 80 50"
                 stroke="#00d4ff" stroke-width="2" stroke-linecap="round"/>
         </svg>
       </div>
@@ -22,38 +22,104 @@
       <p class="subtitle">AI Assistant Configuration</p>
     </div>
 
-    <div class="settings-section">
-      <div class="setting-item">
-        <label for="gemini-model">Gemini 모델</label>
-        <select id="gemini-model" class="jarvis-select">
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash (권장)</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-          <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental</option>
-          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-        </select>
-      </div>
-
-      <div class="setting-item">
-        <label for="api-key">API 키</label>
-        <div class="input-wrapper">
-          <input type="password" id="api-key" class="jarvis-input" placeholder="Gemini API 키를 입력하세요">
-          <button id="toggle-key" class="toggle-btn" title="키 표시/숨기기">👁️</button>
-        </div>
-      </div>
-
-      <div class="setting-item">
-        <label>
-          <input type="checkbox" id="auto-activate" class="jarvis-checkbox">
-          <span>자동 활성화 (5초 대기 후 자동 실행)</span>
-        </label>
-      </div>
-
-      <button id="save-btn" class="jarvis-button primary">
-        <span class="button-icon">💾</span>
-        설정 저장
-      </button>
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="settings">설정</button>
+      <button class="tab-btn" data-tab="cache">캐시</button>
+      <button class="tab-btn" data-tab="watch">감시</button>
     </div>
+
+    <section class="tab-panel" id="panel-settings">
+      <div class="settings-section">
+        <div class="setting-item">
+          <label for="gemini-model">Gemini 모델</label>
+          <select id="gemini-model" class="jarvis-select">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (권장)</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash Experimental</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+          </select>
+        </div>
+
+        <div class="setting-item">
+          <label for="api-key">API 키</label>
+          <div class="input-wrapper">
+            <input type="password" id="api-key" class="jarvis-input" placeholder="Gemini API 키를 입력하세요">
+            <button id="toggle-key" class="toggle-btn" title="키 표시/숨기기">👁️</button>
+          </div>
+          <button id="test-key-btn" class="jarvis-button secondary small">🔍 API 키 테스트</button>
+        </div>
+
+        <div class="setting-item">
+          <label>
+            <input type="checkbox" id="auto-activate" class="jarvis-checkbox">
+            <span>자동 활성화</span>
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <label for="activation-delay">자동 활성화 지연 (초)</label>
+          <input type="number" id="activation-delay" class="jarvis-input" min="0" max="30" step="1" value="2">
+        </div>
+
+        <div class="setting-item">
+          <label>
+            <input type="checkbox" id="cache-enabled" class="jarvis-checkbox" checked>
+            <span>URL 분석 결과 캐시 사용</span>
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <label for="cache-ttl">캐시 유효기간 (시간)</label>
+          <input type="number" id="cache-ttl" class="jarvis-input" min="1" max="720" step="1" value="24">
+        </div>
+
+        <div class="setting-item">
+          <label>
+            <input type="checkbox" id="auto-translate" class="jarvis-checkbox" checked>
+            <span>외국어 페이지 자동 번역 분석</span>
+          </label>
+        </div>
+
+        <button id="save-btn" class="jarvis-button primary">
+          <span class="button-icon">💾</span>
+          설정 저장
+        </button>
+      </div>
+    </section>
+
+    <section class="tab-panel hidden" id="panel-cache">
+      <div class="cache-actions">
+        <button id="reanalyze-btn" class="jarvis-button secondary">현재 탭 재분석</button>
+        <button id="invalidate-btn" class="jarvis-button secondary">현재 URL 캐시 삭제</button>
+        <button id="clear-all-btn" class="jarvis-button danger">전체 캐시 삭제</button>
+      </div>
+      <div class="cache-filter">
+        <input type="search" id="cache-search" class="jarvis-input small" placeholder="🔍 제목/URL/요약/태그 검색">
+      </div>
+      <div id="cache-tag-filter" class="cache-tag-filter"></div>
+      <div class="cache-list-header">
+        <span>저장된 분석</span>
+        <span id="cache-count">0</span>
+      </div>
+      <ul id="cache-list" class="cache-list"></ul>
+    </section>
+
+    <section class="tab-panel hidden" id="panel-watch">
+      <div class="watch-info">
+        <p>관심 페이지는 주기적으로 변경이 감지되며, 변경 시 알림을 받습니다.</p>
+      </div>
+      <div class="cache-list-header">
+        <span>감시 중인 페이지</span>
+        <span id="watch-count">0</span>
+      </div>
+      <ul id="watch-list" class="cache-list"></ul>
+
+      <div class="cache-list-header">
+        <span>선택 페이지 변경 이력</span>
+      </div>
+      <ul id="watch-history" class="cache-list"></ul>
+    </section>
 
     <div id="status-message" class="status-message"></div>
   </div>
@@ -61,4 +127,3 @@
   <script src="popup.js"></script>
 </body>
 </html>
-

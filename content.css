@@ -145,6 +145,27 @@
   font-weight: 500;
 }
 
+.jarvis-badge-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.jarvis-badge-btn {
+  flex: 1;
+  background: rgba(0, 212, 255, 0.12);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  color: #00d4ff;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.jarvis-badge-btn:hover { background: rgba(0, 212, 255, 0.22); }
+
 /* 요약 패널 */
 #jarvis-summary-panel {
   position: fixed;
@@ -186,6 +207,18 @@
   justify-content: center;
 }
 
+.jarvis-cache-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  border-radius: 10px;
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+}
+
 .jarvis-summary-close {
   margin-left: auto;
   background: transparent;
@@ -208,6 +241,56 @@
   background: rgba(0, 212, 255, 0.2);
   color: #00ffff;
 }
+
+.jarvis-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.jarvis-icon-btn {
+  background: transparent;
+  border: none;
+  color: #00d4ff;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+.jarvis-icon-btn:hover {
+  background: rgba(0, 212, 255, 0.2);
+  color: #00ffff;
+}
+
+.jarvis-menu {
+  position: absolute;
+  top: 52px;
+  right: 20px;
+  background: rgba(26, 26, 46, 0.98);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 1000001;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+.jarvis-menu button {
+  background: transparent;
+  border: none;
+  color: #e0e0e0;
+  padding: 8px 12px;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+.jarvis-menu button:hover { background: rgba(0, 212, 255, 0.15); }
 
 .jarvis-summary-content {
   padding: 20px;
@@ -285,14 +368,187 @@
   white-space: pre-wrap;
 }
 
+/* 마크다운 콘텐츠 */
+.jarvis-message-content p { margin: 0 0 6px; }
+.jarvis-message-content p:last-child { margin-bottom: 0; }
+.jarvis-message-content strong { color: #fff; }
+.jarvis-message-content em { color: #b9e8ff; }
+.jarvis-md-link {
+  color: #00d4ff;
+  text-decoration: underline;
+  text-decoration-color: rgba(0, 212, 255, 0.4);
+}
+.jarvis-md-link:hover { color: #00ffff; }
+.jarvis-md-list {
+  margin: 6px 0 6px 18px;
+  padding: 0;
+}
+.jarvis-md-list li { margin: 2px 0; }
+.jarvis-inline-code {
+  background: rgba(0, 212, 255, 0.12);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #b9e8ff;
+}
+.jarvis-code {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #e0e0e0;
+  position: relative;
+}
+.jarvis-code code { white-space: pre; }
+.jarvis-code[data-lang]:not([data-lang=""])::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 10px;
+  color: rgba(0, 212, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 구문 강조 */
+.jarvis-hl-keyword { color: #ff79c6; font-weight: 500; }
+.jarvis-hl-string  { color: #f1fa8c; }
+.jarvis-hl-comment { color: #6272a4; font-style: italic; }
+.jarvis-hl-number  { color: #bd93f9; }
+
+/* 링크 프리뷰 */
+.jarvis-link-rich {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 6px;
+  text-decoration: none !important;
+}
+.jarvis-link-rich:hover { background: rgba(0, 212, 255, 0.18); }
+.jarvis-link-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+}
+.jarvis-link-host {
+  color: #6c9fb0;
+  font-size: 10px;
+  margin-left: 4px;
+}
+.jarvis-img-preview img {
+  max-width: 240px;
+  max-height: 160px;
+  border-radius: 6px;
+  display: block;
+  margin: 6px 0;
+  border: 1px solid rgba(0, 212, 255, 0.25);
+}
+
+/* 포커스 / 비교 칩 */
+.jarvis-focus-chip-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+}
+.jarvis-focus-chip-container:empty { display: none; }
+.jarvis-focus-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  background: rgba(0, 212, 255, 0.15);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 10px;
+  color: #00d4ff;
+  font-size: 11px;
+}
+.jarvis-focus-chip button {
+  background: transparent;
+  border: none;
+  color: #00d4ff;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.jarvis-focus-chip button:hover { color: #ff6b6b; }
+
+.jarvis-compare-box {
+  background: rgba(255, 121, 198, 0.08);
+  border: 1px solid rgba(255, 121, 198, 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.jarvis-compare-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff79c6;
+  margin-bottom: 6px;
+}
+.jarvis-compare-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+}
+.jarvis-compare-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #e0e0e0;
+}
+.jarvis-compare-actions {
+  display: flex;
+  gap: 6px;
+}
+.jarvis-compare-actions .tiny-btn {
+  background: rgba(255, 121, 198, 0.12);
+  border: 1px solid rgba(255, 121, 198, 0.3);
+  color: #ff79c6;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.jarvis-compare-actions .tiny-btn:hover { background: rgba(255, 121, 198, 0.22); }
+
 /* 채팅 입력 */
 .jarvis-chat-input-container {
+  position: relative;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 16px 20px;
   border-top: 1px solid rgba(0, 212, 255, 0.3);
   background: rgba(0, 212, 255, 0.05);
 }
+
+.jarvis-resize-handle {
+  position: absolute;
+  top: -6px;
+  left: 8px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 45%, rgba(0, 212, 255, 0.6) 45%, rgba(0, 212, 255, 0.6) 55%, transparent 55%);
+  border-radius: 3px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+.jarvis-resize-handle:hover { opacity: 1; }
 
 .jarvis-chat-input {
   flex: 1;

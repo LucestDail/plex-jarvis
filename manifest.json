@@ -1,15 +1,19 @@
 {
   "manifest_version": 3,
   "name": "JARVIS - AI Assistant",
-  "version": "1.0.0",
-  "description": "AI-powered assistant that provides contextual information based on your browsing",
+  "version": "1.2.0",
+  "description": "AI-powered assistant that provides contextual information, caching, watchlist, and chat based on your browsing",
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs",
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -17,7 +21,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": [
+        "modules/cache.js",
+        "modules/collector.js",
+        "modules/analyzer.js",
+        "modules/renderer.js",
+        "content.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
@@ -36,4 +46,3 @@
     "128": "icons/icon128.png"
   }
 }
-
