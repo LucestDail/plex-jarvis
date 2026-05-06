@@ -73,55 +73,60 @@
       const cacheEnabled = settings.cacheEnabled !== false;
       const cached = cacheEnabled ? await NS.Cache.getAnalysis(window.location.href) : null;
 
-      let enhanced = null;
-      let isCached = false;
-
       const cacheMatchesMode = (row) => row && row.translated === shouldTranslate;
+      const isCacheHit = !!(cached && !cached.stale && cached.signature === currentPageInfo.signature && cacheMatchesMode(cached));
 
-      if (cached && !cached.stale && cached.signature === currentPageInfo.signature && cacheMatchesMode(cached)) {
+      const prevChat = (await NS.Cache.getChat(window.location.href).catch(() => [])) || [];
+      chatHistory = Array.isArray(prevChat) ? prevChat : [];
+      const watchEnabled = await NS.Cache.isWatched(window.location.href);
+
+      // ===== 캐시 히트 — 즉시 표시 =====
+      if (isCacheHit) {
         NS.Renderer.setIndicatorState(indicator, 'cached');
-        enhanced = { summary: cached.summary, elements: cached.elements };
-        isCached = true;
+        NS.Renderer.removeIndicator(1000);
+        currentSummary = cached.summary || '';
         translatedActive = !!cached.translated;
-      } else {
-        enhanced = await NS.Analyzer.analyzePage(currentPageInfo, settings, {
-          chunkSize: 12,
-          translate: shouldTranslate,
-          pageLang: pageLanguage.primary,
+
+        panelHandle = NS.Renderer.showSummaryPanel({
+          summary: currentSummary,
+          cached: true,
+          translated: translatedActive,
+          language: pageLanguage.primary,
+          watchEnabled,
+          onAskStream: handleAskStream,
+          onAsk: handleAsk,
+          onClose: () => { panelHandle = null; },
+          onExportText: () => exportChat('text'),
+          onExportMarkdown: () => exportChat('markdown'),
+          onToggleWatch: toggleWatch,
+          onTranslateAgain: () => retranslate(),
         });
-        if (cacheEnabled) {
-          await NS.Cache.putAnalysis(window.location.href, {
-            ...enhanced,
-            language: pageLanguage.primary,
-            translated: shouldTranslate,
-          }, {
-            title: currentPageInfo.title,
-            signature: currentPageInfo.signature,
-          });
-        }
-      }
-
-      NS.Renderer.setIndicatorState(indicator, 'success');
-      NS.Renderer.removeIndicator(1000);
-
-      if (!enhanced || (!enhanced.elements?.length && !enhanced.summary)) {
-        NS.Renderer.setIndicatorState(indicator, 'noInfo');
-        NS.Renderer.removeIndicator(2000);
+        chatHistory.forEach((m) => {
+          panelHandle.appendMessage(m.role === 'user' ? 'user' : 'assistant', m.content);
+        });
+        const count = NS.Renderer.applyEnhancedInfo(
+          { summary: cached.summary, elements: cached.elements },
+          currentPageInfo.elementMap,
+          {
+            onAsk: (info) => panelHandle?.addFocus(info),
+            onCompare: (info) => panelHandle?.addCompare(info),
+          },
+        );
+        log(`${count}개 요소에 증강 정보 추가됨 (캐시${translatedActive ? ', 번역' : ''})`);
+        setupMutationObserver(settings);
         return;
       }
 
-      currentSummary = enhanced.summary || '';
-      const prevChat = (await NS.Cache.getChat(window.location.href).catch(() => [])) || [];
-      chatHistory = Array.isArray(prevChat) ? prevChat : [];
-
-      const watchEnabled = await NS.Cache.isWatched(window.location.href);
-
+      // ===== 점진 분석 (Progressive Streaming) =====
+      // 1) 패널을 빈 상태로 즉시 띄움 → 첫 청크 응답이 들어오는 즉시 반영
+      currentSummary = '';
       panelHandle = NS.Renderer.showSummaryPanel({
-        summary: currentSummary,
-        cached: isCached,
+        summary: '',
+        cached: false,
         translated: translatedActive,
         language: pageLanguage.primary,
         watchEnabled,
+        analyzing: true,
         onAskStream: handleAskStream,
         onAsk: handleAsk,
         onClose: () => { panelHandle = null; },
@@ -130,17 +135,71 @@
         onToggleWatch: toggleWatch,
         onTranslateAgain: () => retranslate(),
       });
-
       chatHistory.forEach((m) => {
         panelHandle.appendMessage(m.role === 'user' ? 'user' : 'assistant', m.content);
       });
 
-      const count = NS.Renderer.applyEnhancedInfo(enhanced, currentPageInfo.elementMap, {
-        onAsk: (info) => panelHandle?.addFocus(info),
-        onCompare: (info) => panelHandle?.addCompare(info),
-      });
-      log(`${count}개 요소에 증강 정보 추가됨${isCached ? ' (캐시)' : ''}${translatedActive ? ' (번역)' : ''}`);
+      const totalCounter = { added: 0 };
+      const enhanced = await NS.Analyzer.analyzePageStream(
+        currentPageInfo,
+        settings,
+        {
+          firstChunkSize: 5,
+          chunkSize: 10,
+          translate: shouldTranslate,
+          pageLang: pageLanguage.primary,
+        },
+        (chunk) => {
+          panelHandle?.setProgress(chunk.completed, chunk.total);
+          if (chunk.error) {
+            log(`청크 ${chunk.index + 1} 실패: ${chunk.error}`);
+            return;
+          }
+          if (chunk.summary && !currentSummary) {
+            currentSummary = chunk.summary;
+            panelHandle?.setSummary(currentSummary);
+          }
+          if (chunk.elements && chunk.elements.length) {
+            const added = NS.Renderer.applyEnhancedInfo(
+              { summary: '', elements: chunk.elements },
+              currentPageInfo.elementMap,
+              {
+                onAsk: (info) => panelHandle?.addFocus(info),
+                onCompare: (info) => panelHandle?.addCompare(info),
+              },
+            );
+            totalCounter.added += added;
+            panelHandle?.setProgressLabel(`${totalCounter.added}개 요소 분석 — ${chunk.completed}/${chunk.total} 청크`);
+          }
+        }
+      );
 
+      panelHandle?.setAnalyzing(false);
+      NS.Renderer.setIndicatorState(indicator, 'success');
+      NS.Renderer.removeIndicator(800);
+
+      if (enhanced.swapped) panelHandle?.setBadge('swapped', '🔁 Flash 폴백');
+      if (enhanced.modelUsed) log('사용 모델:', enhanced.modelUsed);
+
+      if (enhanced.summary && !currentSummary) {
+        currentSummary = enhanced.summary;
+        panelHandle?.setSummary(currentSummary);
+      }
+
+      // 캐시 저장
+      if (cacheEnabled && (enhanced.elements.length || enhanced.summary)) {
+        NS.Cache.putAnalysis(window.location.href, {
+          summary: enhanced.summary,
+          elements: enhanced.elements,
+          language: pageLanguage.primary,
+          translated: shouldTranslate,
+        }, {
+          title: currentPageInfo.title,
+          signature: currentPageInfo.signature,
+        }).catch(() => {});
+      }
+
+      log(`${totalCounter.added}개 요소에 증강 정보 추가됨${translatedActive ? ' (번역)' : ''}${enhanced.swapped ? ' [hot-swap]' : ''}`);
       setupMutationObserver(settings);
     } catch (e) {
       err('활성화 오류:', e);

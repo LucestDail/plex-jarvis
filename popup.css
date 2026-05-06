@@ -241,6 +241,23 @@ body {
 .tag-pill:hover { background: rgba(0, 212, 255, 0.18); }
 .tag-pill.active { background: #00d4ff; color: #0f0c29; border-color: #00d4ff; font-weight: 600; }
 
+.setting-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.4;
+}
+optgroup {
+  color: #8fdcff;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 11px;
+}
+optgroup option {
+  color: #ffffff;
+  font-weight: 400;
+}
+
 .cache-item-tags {
   display: flex;
   flex-wrap: wrap;

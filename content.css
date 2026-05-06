@@ -219,6 +219,52 @@
   color: #00d4ff;
 }
 
+/* ===== 점진 분석 진행률 ===== */
+.jarvis-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  background: rgba(0, 212, 255, 0.05);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.15);
+  font-size: 11px;
+  color: #8fdcff;
+  text-transform: none;
+  letter-spacing: 0.3px;
+}
+.jarvis-progress-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(0, 212, 255, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.jarvis-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00d4ff 0%, #6cf 100%);
+  width: 0;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+}
+.jarvis-progress-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.jarvis-summary-placeholder {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(0, 212, 255, 0.08);
+  border-radius: 8px;
+  color: #8fdcff;
+  font-size: 12px;
+  animation: jarvis-pulse 1.5s ease-in-out infinite;
+}
+@keyframes jarvis-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 .jarvis-summary-close {
   margin-left: auto;
   background: transparent;

@@ -304,7 +304,7 @@
 
   // ===== 요약 + 채팅 패널 =====
   const showSummaryPanel = ({
-    summary, cached, translated, language,
+    summary, cached, translated, language, analyzing,
     onAsk, onAskStream, onClose,
     onExportText, onExportMarkdown,
     onToggleWatch, watchEnabled, onTranslateAgain,
@@ -328,7 +328,7 @@
           </svg>
         </div>
         <span>JARVIS</span>
-        ${badges.join('')}
+        <span id="jarvis-header-badges">${badges.join('')}</span>
         <div class="jarvis-header-actions">
           <button class="jarvis-icon-btn" id="jarvis-watch-btn" title="이 페이지 감시 ${watchEnabled ? '해제' : '추가'}">
             ${watchEnabled ? '🔔' : '🔕'}
@@ -337,9 +337,15 @@
           <button class="jarvis-summary-close" id="jarvis-panel-close" aria-label="닫기">×</button>
         </div>
       </div>
+      <div class="jarvis-progress-bar" id="jarvis-progress-bar" ${analyzing ? '' : 'style="display:none;"'}>
+        <div class="jarvis-progress-track"><div class="jarvis-progress-fill" id="jarvis-progress-fill" style="width:0%"></div></div>
+        <span class="jarvis-progress-label" id="jarvis-progress-label">분석 시작 중…</span>
+      </div>
       <div class="jarvis-summary-content" id="jarvis-summary-text">
         <div class="jarvis-message jarvis-message-assistant" data-role="summary">
-          <div class="jarvis-message-content">${renderMarkdown(summary)}</div>
+          <div class="jarvis-message-content" id="jarvis-summary-body">${
+            summary ? renderMarkdown(summary) : (analyzing ? '<span class="jarvis-summary-placeholder">⚡ 빠른 요약 생성 중…</span>' : '')
+          }</div>
         </div>
         <div id="jarvis-compare-box" class="jarvis-compare-box" style="display:none;">
           <div class="jarvis-compare-title">⚖️ 비교 대상</div>
@@ -557,11 +563,56 @@
       chatInput.focus();
     }, 100);
 
+    // ===== 점진 분석 컨트롤 (외부에서 호출) =====
+    const summaryBody = panel.querySelector('#jarvis-summary-body');
+    const progressBar = panel.querySelector('#jarvis-progress-bar');
+    const progressFill = panel.querySelector('#jarvis-progress-fill');
+    const progressLabel = panel.querySelector('#jarvis-progress-label');
+    const headerBadges = panel.querySelector('#jarvis-header-badges');
+
+    const setSummary = (text) => {
+      if (!summaryBody) return;
+      summaryBody.innerHTML = renderMarkdown(text || '');
+    };
+    const setAnalyzing = (on) => {
+      if (!progressBar) return;
+      progressBar.style.display = on ? 'flex' : 'none';
+    };
+    const setProgress = (completed, total) => {
+      if (!progressFill || !progressLabel) return;
+      const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+      progressFill.style.width = `${pct}%`;
+      if (!progressLabel.dataset.custom) {
+        progressLabel.textContent = `분석 중 ${completed}/${total} 청크 (${pct}%)`;
+      }
+    };
+    const setProgressLabel = (label) => {
+      if (!progressLabel) return;
+      progressLabel.dataset.custom = '1';
+      progressLabel.textContent = label;
+    };
+    const setBadge = (key, html) => {
+      if (!headerBadges) return;
+      const id = `jarvis-badge-${key}`;
+      const existingBadge = headerBadges.querySelector(`#${id}`);
+      if (existingBadge) existingBadge.remove();
+      const span = document.createElement('span');
+      span.id = id;
+      span.className = 'jarvis-cache-badge';
+      span.textContent = html;
+      headerBadges.appendChild(span);
+    };
+
     return {
       panel,
       appendMessage,
       addFocus,
       addCompare,
+      setSummary,
+      setAnalyzing,
+      setProgress,
+      setProgressLabel,
+      setBadge,
       close: () => panel.querySelector('#jarvis-panel-close').click(),
     };
   };

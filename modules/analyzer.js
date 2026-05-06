@@ -1,7 +1,28 @@
-// JARVIS Analyzer Module — Gemini API (structured + streaming) + 에러 복구 + 번역
+// JARVIS Analyzer Module — Gemini API (structured + streaming) + Hot-Swap + 점진 분석
 (() => {
   const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+  // ==== 모델 해석기 (Hot Swap) ====
+  // 'auto-3.1' = primary: 3.1 Flash-Lite, fallback: 3 Flash
+  // 'auto-3' / 'auto' 는 동일 처리. 명시 모델은 그대로 사용 (fallback 없음).
+  const MODEL_PRESETS = {
+    'auto-3.1': { primary: 'gemini-3.1-flash-lite-preview', fallback: 'gemini-3-flash-preview' },
+    'auto-3': { primary: 'gemini-3-flash-preview', fallback: 'gemini-3.1-flash-lite-preview' },
+    'auto': { primary: 'gemini-3.1-flash-lite-preview', fallback: 'gemini-3-flash-preview' },
+  };
+
+  const resolveModels = (setting) => {
+    if (!setting) return MODEL_PRESETS['auto-3.1'];
+    if (MODEL_PRESETS[setting]) return MODEL_PRESETS[setting];
+    return { primary: setting, fallback: null };
+  };
+
+  const buildUrl = (model, kind, apiKey) => {
+    const op = kind === 'stream' ? 'streamGenerateContent?alt=sse' : 'generateContent';
+    return `${API_BASE}/${model}:${op}${kind === 'stream' ? '&' : '?'}key=${apiKey}`;
+  };
+
+  // ==== 응답 스키마 ====
   const responseSchema = {
     type: 'object',
     properties: {
@@ -25,6 +46,7 @@
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // ==== 프롬프트 빌더 ====
   const buildPrompt = (pageInfo, elements, options = {}) => {
     const elementsInfo = elements.map((el) => ({
       identifier: el.identifier,
@@ -33,31 +55,36 @@
       id: el.id,
       className: el.className,
       href: el.href,
+      context: el.context, // 주변 텍스트 (있을 때)
     }));
 
     const languageInstruction = options.translate
       ? `페이지 언어는 ${options.pageLang || '외국어'}이지만 응답(요약/설명/태그)은 모두 한국어로 번역해서 작성하세요.`
       : '응답은 한국어로 작성하세요.';
-    const mode = options.summarize ? '페이지 전체 요약과 함께' : '요소별 설명을 중심으로';
+    const mode = options.summarize ? '페이지 전체 요약과 함께' : '요소별 설명만';
 
-    return `당신은 JARVIS입니다. 다음 웹페이지를 ${mode} 분석해주세요.
+    return `당신은 JARVIS입니다. 다음 웹페이지 일부를 ${mode} 분석합니다.
 ${languageInstruction}
+- 짧고 정확하게. 각 요소 enhancedInfo는 1~2문장 이내.
+- relatedLinks는 절대 추측하지 말고, 입력된 href나 페이지 URL 도메인 내부만 허용.
+- tags는 최대 3개, 한국어 명사 위주.
 
 페이지 제목: ${pageInfo.title}
 URL: ${pageInfo.url}
 
-주요 요소들(identifier로 식별):
+분석 대상 요소(JSON):
 ${JSON.stringify(elementsInfo, null, 2)}
 
-각 요소에 대해 맥락에 맞는 부가 설명, 관련 링크(있다면), 간결한 태그를 제공하세요.
-응답은 정의된 JSON 스키마를 정확히 따르세요.`;
+출력은 정의된 JSON 스키마를 정확히 따르세요.`;
   };
 
-  const postJSON = async (apiUrl, body) => {
+  // ==== Fetch 래퍼 ====
+  const postJSON = async (apiUrl, body, signal) => {
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -91,18 +118,29 @@ ${JSON.stringify(elementsInfo, null, 2)}
     return result;
   };
 
-  // 토큰 초과로 판단되는 오류인지
   const isTokenLimit = (err) => {
     if (!err) return false;
     const msg = (err.message || '').toLowerCase();
     return err.status === 400 && (msg.includes('token') || msg.includes('too long') || msg.includes('input') || msg.includes('context'));
   };
-  const isRateLimit = (err) => err && (err.status === 429 || err.status === 503);
+  const isRateLimit = (err) => err && (err.status === 429 || err.status === 503 || err.status === 500);
+  const isHotSwappable = (err) => {
+    if (!err) return false;
+    if (err.status === 404) return true; // 모델 미존재(프리뷰 미공개 등) → 폴백
+    if (err.status === 403) return true; // 권한 문제 → 폴백
+    if (err.status >= 500) return true;
+    if ((err.message || '').includes('JSON 파싱 실패')) return true;
+    return false;
+  };
 
-  // 텍스트 압축(요약을 압축하려는 경우 요소 텍스트 길이 줄이기)
-  const compressElements = (elements) => elements.map((e) => ({ ...e, text: (e.text || '').slice(0, 80) }));
+  const compressElements = (elements) => elements.map((e) => ({
+    ...e,
+    text: (e.text || '').slice(0, 80),
+    context: (e.context || '').slice(0, 60),
+  }));
 
-  const callOnce = async ({ apiUrl, pageInfo, elements, summarize = true, retry = 2, translate = false, pageLang = '' }) => {
+  // ==== 단일 모델로 한 번 호출 (재시도 포함) ====
+  const callOnceWithModel = async ({ model, apiKey, pageInfo, elements, summarize = true, retry = 1, translate = false, pageLang = '', signal }) => {
     let currentElements = elements;
     let lastError = null;
 
@@ -112,74 +150,140 @@ ${JSON.stringify(elementsInfo, null, 2)}
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema,
+          // Lite/Flash 빠른 응답을 위해 토큰 한도 보수적 설정
+          maxOutputTokens: summarize ? 1800 : 1200,
+          temperature: 0.4,
         },
       };
       try {
-        const data = await postJSON(apiUrl, body);
+        const data = await postJSON(buildUrl(model, 'json', apiKey), body, signal);
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) return { summary: '', elements: [] };
         const parsed = parseJSONResponse(text);
         return {
           summary: typeof parsed.summary === 'string' ? parsed.summary : '',
           elements: Array.isArray(parsed.elements) ? parsed.elements : [],
+          modelUsed: model,
         };
       } catch (err) {
         lastError = err;
         if (attempt >= retry) break;
-
         if (isTokenLimit(err)) {
-          // 요소를 절반으로 축소 + 텍스트 압축
           const half = Math.max(1, Math.floor(currentElements.length / 2));
           currentElements = compressElements(currentElements.slice(0, half));
           continue;
         }
         if (isRateLimit(err)) {
-          await wait(800 * Math.pow(2, attempt)); // 지수 백오프
+          await wait(600 * Math.pow(2, attempt));
           continue;
         }
-        // 일반 오류 — 짧게 대기 후 재시도
-        await wait(400 * (attempt + 1));
+        await wait(300 * (attempt + 1));
       }
     }
     throw lastError;
   };
 
-  const analyzePage = async (pageInfo, settings, options = {}) => {
-    const model = settings.geminiModel || 'gemini-2.5-flash';
+  // ==== Hot Swap 래퍼: primary 시도 → 실패면 fallback 1회 ====
+  const callWithHotSwap = async ({ models, apiKey, pageInfo, elements, summarize, translate, pageLang, signal }) => {
+    try {
+      return await callOnceWithModel({ model: models.primary, apiKey, pageInfo, elements, summarize, retry: 1, translate, pageLang, signal });
+    } catch (err) {
+      if (models.fallback && isHotSwappable(err)) {
+        try {
+          const out = await callOnceWithModel({ model: models.fallback, apiKey, pageInfo, elements, summarize, retry: 1, translate, pageLang, signal });
+          return { ...out, swapped: true };
+        } catch (e2) {
+          throw e2;
+        }
+      }
+      throw err;
+    }
+  };
+
+  // ==== 청크 분할: 첫 청크는 작게(빠른 첫 응답) ====
+  const splitChunks = (elements, options = {}) => {
+    const firstSize = options.firstChunkSize || 5;
+    const restSize = options.chunkSize || 10;
+    if (elements.length === 0) return [];
+    const head = elements.slice(0, firstSize);
+    const tail = elements.slice(firstSize);
+    const chunks = [head];
+    for (let i = 0; i < tail.length; i += restSize) chunks.push(tail.slice(i, i + restSize));
+    return chunks;
+  };
+
+  // ==== 점진 분석 (Streaming Chunk Pipeline) ====
+  // onChunk(chunkResult)가 각 청크 도착 즉시 호출됨.
+  // chunkResult = { index, total, completed, summary?, elements, error?, modelUsed, swapped? }
+  const analyzePageStream = async (pageInfo, settings, options = {}, onChunk) => {
     const apiKey = settings.apiKey;
     if (!apiKey) throw new Error('API 키가 설정되지 않았습니다.');
+    const models = resolveModels(settings.geminiModel);
 
-    const apiUrl = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
-    const chunkSize = options.chunkSize || 12;
-    const chunks = chunkArray(pageInfo.elements, chunkSize);
+    const chunks = splitChunks(pageInfo.elements, options);
+    if (chunks.length === 0) return { summary: '', elements: [], errors: [] };
 
-    if (chunks.length === 0) return { summary: '', elements: [] };
+    let completed = 0;
+    const merged = { summary: '', elements: [], errors: [], modelUsed: null, swapped: false };
 
-    const calls = chunks.map((chunk, idx) =>
-      callOnce({
-        apiUrl,
+    const promises = chunks.map((chunk, idx) => {
+      const summarize = idx === 0;
+      return callWithHotSwap({
+        models,
+        apiKey,
         pageInfo,
         elements: chunk,
-        summarize: idx === 0,
-        retry: 2,
+        summarize,
         translate: options.translate === true,
         pageLang: options.pageLang || '',
-      }).catch((err) => {
-        console.error('JARVIS chunk 실패:', err);
-        return { summary: '', elements: [], _error: err };
+        signal: options.signal,
       })
-    );
+        .then((result) => {
+          completed++;
+          if (summarize && result.summary && !merged.summary) merged.summary = result.summary;
+          merged.elements.push(...(result.elements || []));
+          if (!merged.modelUsed) merged.modelUsed = result.modelUsed;
+          if (result.swapped) merged.swapped = true;
+          if (onChunk) {
+            onChunk({
+              index: idx,
+              total: chunks.length,
+              completed,
+              summary: result.summary || '',
+              elements: result.elements || [],
+              modelUsed: result.modelUsed,
+              swapped: !!result.swapped,
+            });
+          }
+          return result;
+        })
+        .catch((err) => {
+          completed++;
+          merged.errors.push(err.message || String(err));
+          if (onChunk) {
+            onChunk({
+              index: idx,
+              total: chunks.length,
+              completed,
+              summary: '',
+              elements: [],
+              error: err.message || String(err),
+            });
+          }
+          return { summary: '', elements: [], _error: err };
+        });
+    });
 
-    const results = await Promise.all(calls);
-    const merged = {
-      summary: results[0]?.summary || '',
-      elements: [],
-      errors: results.filter((r) => r._error).map((r) => r._error.message),
-    };
-    results.forEach((r) => merged.elements.push(...(r.elements || [])));
+    await Promise.all(promises);
     return merged;
   };
 
+  // ==== 호환 진입점: analyzePage(레거시) ====
+  const analyzePage = async (pageInfo, settings, options = {}) => {
+    return analyzePageStream(pageInfo, settings, options);
+  };
+
+  // ==== 채팅 ====
   const buildChatPrompt = ({ question, summary, pageInfo, history, focus }) => {
     const historyText = (history || [])
       .slice(-6)
@@ -207,97 +311,132 @@ ${historyText || '(없음)'}
   };
 
   const chat = async ({ question, summary, pageInfo, history, settings, focus }) => {
-    const model = settings.geminiModel || 'gemini-2.5-flash';
     const apiKey = settings.apiKey;
     if (!apiKey) throw new Error('API 키가 설정되지 않았습니다.');
-    const apiUrl = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
+    const models = resolveModels(settings.geminiModel);
 
     const prompt = buildChatPrompt({ question, summary, pageInfo, history, focus });
-    const data = await postJSON(apiUrl, { contents: [{ parts: [{ text: prompt }] }] });
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('응답을 받을 수 없습니다');
-    return text;
+    const body = { contents: [{ parts: [{ text: prompt }] }] };
+
+    try {
+      const data = await postJSON(buildUrl(models.primary, 'json', apiKey), body);
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('응답을 받을 수 없습니다');
+      return text;
+    } catch (err) {
+      if (models.fallback && isHotSwappable(err)) {
+        const data = await postJSON(buildUrl(models.fallback, 'json', apiKey), body);
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error('응답을 받을 수 없습니다');
+        return text;
+      }
+      throw err;
+    }
   };
 
-  // Streaming 채팅 — SSE 유사 스트림(streamGenerateContent ?alt=sse) 사용
+  // Streaming 채팅 — Hot Swap 적용
   const chatStream = async ({ question, summary, pageInfo, history, settings, focus, onDelta, signal }) => {
-    const model = settings.geminiModel || 'gemini-2.5-flash';
     const apiKey = settings.apiKey;
     if (!apiKey) throw new Error('API 키가 설정되지 않았습니다.');
+    const models = resolveModels(settings.geminiModel);
 
-    const apiUrl = `${API_BASE}/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
     const prompt = buildChatPrompt({ question, summary, pageInfo, history, focus });
     const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      signal,
-    });
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      throw new Error(`스트리밍 실패: ${response.status} - ${errText.slice(0, 200)}`);
-    }
-    if (!response.body) throw new Error('스트림을 읽을 수 없습니다');
+    const tryModel = async (model) => {
+      const apiUrl = buildUrl(model, 'stream', apiKey);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal,
+      });
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        const err = new Error(`스트리밍 실패: ${response.status} - ${errText.slice(0, 200)}`);
+        err.status = response.status;
+        throw err;
+      }
+      if (!response.body) throw new Error('스트림을 읽을 수 없습니다');
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-    let full = '';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let full = '';
 
-    const handleEvent = (rawEvent) => {
-      const lines = rawEvent.split('\n');
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const data = line.slice(5).trim();
-        if (!data || data === '[DONE]') continue;
-        try {
-          const json = JSON.parse(data);
-          const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-          if (text) {
-            full += text;
-            if (onDelta) onDelta(text, full);
-          }
-        } catch (_) {
-          // 일부 조각이 손상되었을 수 있으니 무시
+      const handleEvent = (rawEvent) => {
+        const lines = rawEvent.split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr || dataStr === '[DONE]') continue;
+          try {
+            const json = JSON.parse(dataStr);
+            const text = json?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+            if (text) {
+              full += text;
+              if (onDelta) onDelta(text, full);
+            }
+          } catch (_) { /* skip malformed */ }
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+          const event = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          handleEvent(event);
         }
       }
+      if (buffer.trim()) handleEvent(buffer);
+      return full;
     };
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE 이벤트는 빈 줄로 구분
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
-        const event = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
-        handleEvent(event);
+    try {
+      return await tryModel(models.primary);
+    } catch (err) {
+      if (models.fallback && isHotSwappable(err)) {
+        return await tryModel(models.fallback);
       }
+      throw err;
     }
-    if (buffer.trim()) handleEvent(buffer);
-    return full;
   };
 
-  // API 키 검증
-  const validateKey = async (apiKey, model = 'gemini-2.5-flash') => {
+  // ==== API 키 검증 ====
+  const validateKey = async (apiKey, modelSetting) => {
     if (!apiKey) return { ok: false, error: 'API 키가 비어 있습니다.' };
+    const models = resolveModels(modelSetting);
+    const tryOne = async (m) => postJSON(buildUrl(m, 'json', apiKey), {
+      contents: [{ parts: [{ text: 'ping' }] }],
+      generationConfig: { maxOutputTokens: 4 },
+    });
     try {
-      const apiUrl = `${API_BASE}/${model}:generateContent?key=${apiKey}`;
-      const data = await postJSON(apiUrl, {
-        contents: [{ parts: [{ text: 'ping' }] }],
-        generationConfig: { maxOutputTokens: 4 },
-      });
-      const ok = !!data?.candidates?.[0];
-      return { ok, model };
+      await tryOne(models.primary);
+      return { ok: true, model: models.primary };
     } catch (e) {
+      if (models.fallback) {
+        try {
+          await tryOne(models.fallback);
+          return { ok: true, model: models.fallback, swapped: true };
+        } catch (e2) {
+          return { ok: false, error: e2.message, status: e2.status };
+        }
+      }
       return { ok: false, error: e.message, status: e.status };
     }
   };
 
   window.JARVIS = window.JARVIS || {};
-  window.JARVIS.Analyzer = { analyzePage, chat, chatStream, validateKey };
+  window.JARVIS.Analyzer = {
+    analyzePage,
+    analyzePageStream,
+    chat,
+    chatStream,
+    validateKey,
+    resolveModels,
+  };
 })();

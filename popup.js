@@ -35,7 +35,7 @@ const fmt = (t) => {
 const loadSettings = async () => {
   const keys = ['geminiModel', 'apiKey', 'autoActivate', 'cacheEnabled', 'cacheTtlHours', 'activationDelayMs', 'autoTranslate'];
   const r = await chrome.storage.local.get(keys);
-  if (r.geminiModel) $('#gemini-model').value = r.geminiModel;
+  $('#gemini-model').value = r.geminiModel || 'auto-3.1';
   if (r.apiKey) $('#api-key').value = r.apiKey;
   $('#auto-activate').checked = r.autoActivate !== false;
   $('#cache-enabled').checked = r.cacheEnabled !== false;
@@ -67,27 +67,49 @@ const saveSettings = async () => {
   }
 };
 
+const MODEL_PRESETS = {
+  'auto-3.1': { primary: 'gemini-3.1-flash-lite-preview', fallback: 'gemini-3-flash-preview' },
+  'auto-3': { primary: 'gemini-3-flash-preview', fallback: 'gemini-3.1-flash-lite-preview' },
+  'auto': { primary: 'gemini-3.1-flash-lite-preview', fallback: 'gemini-3-flash-preview' },
+};
+
+const resolveModels = (setting) => {
+  if (!setting) return MODEL_PRESETS['auto-3.1'];
+  if (MODEL_PRESETS[setting]) return MODEL_PRESETS[setting];
+  return { primary: setting, fallback: null };
+};
+
+const pingModel = async (model, apiKey) => {
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const res = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: 'ping' }] }],
+      generationConfig: { maxOutputTokens: 4 },
+    }),
+  });
+  if (res.ok) return { ok: true };
+  const data = await res.json().catch(() => ({}));
+  return { ok: false, status: res.status, message: data.error?.message || '키 검증 실패' };
+};
+
 const testApiKey = async () => {
   const apiKey = $('#api-key').value.trim();
-  const model = $('#gemini-model').value;
+  const setting = $('#gemini-model').value;
   if (!apiKey) { showStatus('API 키를 입력해주세요.', 'error'); return; }
   showStatus('API 키를 검증 중...', 'info');
+  const models = resolveModels(setting);
   try {
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'ping' }] }],
-        generationConfig: { maxOutputTokens: 4 },
-      }),
-    });
-    if (res.ok) {
-      showStatus(`✅ 키가 유효합니다 (${model}).`, 'success');
-    } else {
-      const data = await res.json().catch(() => ({}));
-      showStatus(`❌ ${res.status} — ${data.error?.message || '키 검증 실패'}`, 'error');
+    const primary = await pingModel(models.primary, apiKey);
+    if (primary.ok) { showStatus(`✅ 키 유효 — ${models.primary}`, 'success'); return; }
+    if (models.fallback) {
+      const fallback = await pingModel(models.fallback, apiKey);
+      if (fallback.ok) { showStatus(`✅ 키 유효 (폴백) — ${models.fallback}`, 'success'); return; }
+      showStatus(`❌ ${primary.status} — ${primary.message}`, 'error');
+      return;
     }
+    showStatus(`❌ ${primary.status} — ${primary.message}`, 'error');
   } catch (e) {
     showStatus(`❌ ${e.message}`, 'error');
   }

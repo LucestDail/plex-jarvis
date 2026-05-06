@@ -35,6 +35,29 @@
     return `${tag}_${index}_${textHash}`;
   };
 
+  // 부모 컨테이너 텍스트에서 요소 텍스트 주변 ±50자 추출 (링크/단어 의미 추론용)
+  const extractContext = (el, ownText, maxChars = 120) => {
+    try {
+      let parent = el.parentElement;
+      let hops = 0;
+      while (parent && hops < 3) {
+        const ptext = (parent.innerText || '').replace(/\s+/g, ' ').trim();
+        if (ptext && ptext.length > ownText.length + 20) {
+          const idx = ptext.indexOf(ownText.slice(0, 30));
+          if (idx >= 0) {
+            const start = Math.max(0, idx - 60);
+            const end = Math.min(ptext.length, idx + ownText.length + 60);
+            return ptext.slice(start, end).slice(0, maxChars);
+          }
+          return ptext.slice(0, maxChars);
+        }
+        parent = parent.parentElement;
+        hops++;
+      }
+    } catch (_) { /* ignore */ }
+    return '';
+  };
+
   const collectPageInfo = (options = {}) => {
     const max = options.max || MAX_ELEMENTS;
     const elements = [];
@@ -63,21 +86,24 @@
       return a.rect.top - b.rect.top;
     });
 
+    const includeContext = options.includeContext !== false;
     candidates.slice(0, max).forEach((c, idx) => {
       const { el, text } = c;
       const tag = el.tagName.toLowerCase();
       const identifier = buildIdentifier(tag, idx, text);
+      const trimmedText = text.substring(0, 150);
 
       const info = {
         identifier,
         tag,
-        text: text.substring(0, 200),
+        text: trimmedText,
         id: el.id || null,
         className: el.className ? el.className.toString().split(' ').slice(0, 3).join(' ') : null,
         href: el.href || null,
         role: el.getAttribute('role') || null,
         ariaLabel: el.getAttribute('aria-label') || null,
         inViewport: c.distance === 0,
+        context: includeContext ? extractContext(el, trimmedText) : '',
       };
       elements.push(info);
       elementMap.set(identifier, el);

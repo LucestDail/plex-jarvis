@@ -196,12 +196,16 @@ chrome.runtime.onStartup.addListener(() => { ensureWatchAlarm(); });
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('JARVIS 확장 프로그램이 설치/업데이트되었습니다.');
-  chrome.storage.local.get(['cacheEnabled', 'cacheTtlHours', 'activationDelayMs', 'autoTranslate'], (res) => {
+  chrome.storage.local.get(['cacheEnabled', 'cacheTtlHours', 'activationDelayMs', 'autoTranslate', 'geminiModel'], (res) => {
     const defaults = {};
     if (res.cacheEnabled === undefined) defaults.cacheEnabled = true;
     if (res.cacheTtlHours === undefined) defaults.cacheTtlHours = 24;
     if (res.activationDelayMs === undefined) defaults.activationDelayMs = 2500;
     if (res.autoTranslate === undefined) defaults.autoTranslate = true;
+    if (!res.geminiModel) defaults.geminiModel = 'auto-3.1';
+    // 구버전 모델 ID 자동 마이그레이션 (2.0 exp 등은 더 이상 보장 안 됨)
+    const legacy = ['gemini-2.0-flash-exp'];
+    if (legacy.includes(res.geminiModel)) defaults.geminiModel = 'auto-3.1';
     if (Object.keys(defaults).length) chrome.storage.local.set(defaults);
   });
   ensureWatchAlarm();
